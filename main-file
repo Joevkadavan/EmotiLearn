@@ -1,0 +1,2092 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmotiLearn - Emotionally Intelligent Learning Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/react@17.0.2/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@17.0.2/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow-x: hidden;
+        }
+        
+        .emoji-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%;
+        }
+        
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .webcam-container {
+            position: relative;
+            width: 160px;
+            height: 120px;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        
+        .emotion-overlay {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .course-card {
+            transition: all 0.3s ease;
+        }
+        
+        .course-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        
+        .progress-ring__circle {
+            stroke-dasharray: 283;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .emotion-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .emotion-bored {
+            background-color: #fecaca;
+            color: #dc2626;
+        }
+
+        .emotion-interested {
+            background-color: #bbf7d0;
+            color: #16a34a;
+        }
+
+        .auth-container {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        }
+
+        /* Animation classes */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .slide-in {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #face-detection-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .recommendation-card {
+            transition: all 0.3s ease;
+        }
+
+        .recommendation-card:hover {
+            transform: scale(1.02);
+        }
+
+        .loader {
+            border-top-color: #3498db;
+            animation: spinner 1.5s linear infinite;
+        }
+
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script type="text/babel">
+        // Main React application
+        const { useState, useEffect, useRef } = React;
+
+        // App component
+        const App = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [currentUser, setCurrentUser] = useState(null);
+            const [currentView, setCurrentView] = useState('login');
+            const [isLoading, setIsLoading] = useState(false);
+            const [modelsLoaded, setModelsLoaded] = useState(false);
+
+            // Load face detection models on app initialization
+            useEffect(() => {
+                const loadModels = async () => {
+                    setIsLoading(true);
+                    try {
+                        await Promise.all([
+                            faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+                            faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+                            faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+                            faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights')
+                        ]);
+                        console.log('Face detection models loaded successfully');
+                        setModelsLoaded(true);
+                    } catch (error) {
+                        console.error('Error loading face detection models:', error);
+                    }
+                    setIsLoading(false);
+                };
+
+                loadModels();
+            }, []);
+
+            const handleLogin = (userData) => {
+                setIsLoading(true);
+                setTimeout(() => {
+                    setCurrentUser(userData);
+                    setIsAuthenticated(true);
+                    setCurrentView('dashboard');
+                    setIsLoading(false);
+                }, 1000);
+            };
+
+            const handleLogout = () => {
+                setCurrentUser(null);
+                setIsAuthenticated(false);
+                setCurrentView('login');
+            };
+
+            const navigateTo = (view) => {
+                setCurrentView(view);
+            };
+
+            // Render appropriate view based on authentication state and current view
+            const renderView = () => {
+                if (isLoading && !modelsLoaded) {
+                    return <LoadingScreen />;
+                }
+
+                if (!isAuthenticated) {
+                    if (currentView === 'login') {
+                        return <Login onLogin={handleLogin} navigateTo={navigateTo} />;
+                    } else if (currentView === 'register') {
+                        return <Register navigateTo={navigateTo} />;
+                    }
+                }
+
+                // Views for authenticated users
+                switch (currentView) {
+                    case 'dashboard':
+                        return <Dashboard user={currentUser} navigateTo={navigateTo} />;
+                    case 'courses':
+                        return <Courses navigateTo={navigateTo} />;
+                    case 'course':
+                        return <CoursePlayer navigateTo={navigateTo} modelsLoaded={modelsLoaded} />;
+                    case 'analytics':
+                        return <Analytics user={currentUser} navigateTo={navigateTo} />;
+                    case 'profile':
+                        return <Profile user={currentUser} navigateTo={navigateTo} onLogout={handleLogout} />;
+                    default:
+                        return <Dashboard user={currentUser} navigateTo={navigateTo} />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {isAuthenticated && (
+                        <Navbar 
+                            currentUser={currentUser} 
+                            currentView={currentView} 
+                            navigateTo={navigateTo} 
+                            onLogout={handleLogout} 
+                        />
+                    )}
+                    <main>
+                        {renderView()}
+                    </main>
+                </div>
+            );
+        };
+
+        // Loading screen component
+        const LoadingScreen = () => (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-indigo-600">
+                <div className="text-white text-3xl font-bold mb-8">
+                    <span className="text-4xl">🧠</span> EmotiLearn
+                </div>
+                <div className="loader w-16 h-16 border-8 border-gray-300 border-t-8 rounded-full"></div>
+                <p className="mt-6 text-white text-xl">Loading face detection models...</p>
+                <p className="mt-2 text-indigo-200">Please wait, this may take a moment</p>
+            </div>
+        );
+
+        // Navbar component
+        const Navbar = ({ currentUser, currentView, navigateTo, onLogout }) => {
+            return (
+                <nav className="bg-white shadow-md">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between h-16">
+                            <div className="flex">
+                                <div className="flex-shrink-0 flex items-center">
+                                    <span className="text-2xl font-bold text-indigo-600">
+                                        <span className="text-2xl">🧠</span> EmotiLearn
+                                    </span>
+                                </div>
+                                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                                    <button
+                                        onClick={() => navigateTo('dashboard')}
+                                        className={`${currentView === 'dashboard' 
+                                            ? 'border-indigo-500 text-gray-900' 
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'} 
+                                            inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                                    >
+                                        Dashboard
+                                    </button>
+                                    <button
+                                        onClick={() => navigateTo('courses')}
+                                        className={`${currentView === 'courses' || currentView === 'course'
+                                            ? 'border-indigo-500 text-gray-900' 
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'} 
+                                            inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                                    >
+                                        Courses
+                                    </button>
+                                    <button
+                                        onClick={() => navigateTo('analytics')}
+                                        className={`${currentView === 'analytics' 
+                                            ? 'border-indigo-500 text-gray-900' 
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'} 
+                                            inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                                    >
+                                        Analytics
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="hidden sm:ml-6 sm:flex sm:items-center">
+                                <div className="ml-3 relative">
+                                    <div className="flex items-center">
+                                        <button
+                                            onClick={() => navigateTo('profile')}
+                                            className="flex text-sm border-2 border-transparent rounded-full focus:outline-none focus:border-gray-300 transition duration-150 ease-in-out"
+                                        >
+                                            <div className="w-10 h-10 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-600 font-bold">
+                                                {currentUser.name.charAt(0).toUpperCase()}
+                                            </div>
+                                        </button>
+                                        <div className="ml-3">
+                                            <p className="text-sm font-medium text-gray-700">{currentUser.name}</p>
+                                            <button 
+                                                onClick={onLogout}
+                                                className="text-xs text-gray-500 hover:text-indigo-500"
+                                            >
+                                                Sign out
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="-mr-2 flex items-center sm:hidden">
+                                <button className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:bg-gray-100 focus:text-gray-500 transition duration-150 ease-in-out">
+                                    <i className="fas fa-bars"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        // Login component
+        const Login = ({ onLogin, navigateTo }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!email || !password) {
+                    setError('Please fill in all fields');
+                    return;
+                }
+
+                // Mock login
+                onLogin({
+                    name: email.split('@')[0],
+                    email: email,
+                    id: '1',
+                    progress: {
+                        coursesCompleted: 3,
+                        currentCourse: 'Introduction to AI',
+                        averageEngagement: 75
+                    }
+                });
+            };
+
+            return (
+                <div className="auth-container min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+                    <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 slide-in">
+                        <div className="text-center">
+                            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                                <span className="text-3xl">🧠</span> EmotiLearn
+                            </h2>
+                            <p className="mt-2 text-sm text-gray-600">
+                                Learn smarter with AI that adapts to you
+                            </p>
+                        </div>
+                        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                            {error && (
+                                <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                                    <div className="flex">
+                                        <div className="flex-shrink-0">
+                                            <i className="fas fa-exclamation-circle text-red-500"></i>
+                                        </div>
+                                        <div className="ml-3">
+                                            <p className="text-sm text-red-700">{error}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="rounded-md shadow-sm -space-y-px">
+                                <div>
+                                    <label htmlFor="email-address" className="sr-only">Email address</label>
+                                    <input
+                                        id="email-address"
+                                        name="email"
+                                        type="email"
+                                        autoComplete="email"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Email address"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="password" className="sr-only">Password</label>
+                                    <input
+                                        id="password"
+                                        name="password"
+                                        type="password"
+                                        autoComplete="current-password"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <input
+                                        id="remember-me"
+                                        name="remember-me"
+                                        type="checkbox"
+                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                                        Remember me
+                                    </label>
+                                </div>
+
+                                <div className="text-sm">
+                                    <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500">
+                                        Forgot your password?
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div>
+                                <button
+                                    type="submit"
+                                    className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                    <span className="absolute left-0 inset-y-0 flex items-center pl-3">
+                                        <i className="fas fa-lock text-indigo-500 group-hover:text-indigo-400"></i>
+                                    </span>
+                                    Sign in
+                                </button>
+                            </div>
+
+                            <div className="text-center">
+                                <p className="mt-2 text-sm text-gray-600">
+                                    Don't have an account?{' '}
+                                    <button
+                                        type="button"
+                                        className="font-medium text-indigo-600 hover:text-indigo-500"
+                                        onClick={() => navigateTo('register')}
+                                    >
+                                        Sign up now
+                                    </button>
+                                </p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // Register component
+        const Register = ({ navigateTo }) => {
+            const [name, setName] = useState('');
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!name || !email || !password || !confirmPassword) {
+                    setError('Please fill in all fields');
+                    return;
+                }
+
+                if (password !== confirmPassword) {
+                    setError('Passwords do not match');
+                    return;
+                }
+
+                // In a real app, you would register the user here
+                navigateTo('login');
+            };
+
+            return (
+                <div className="auth-container min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+                    <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 slide-in">
+                        <div className="text-center">
+                            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                                <span className="text-3xl">🧠</span> EmotiLearn
+                            </h2>
+                            <p className="mt-2 text-sm text-gray-600">
+                                Create your EmotiLearn account
+                            </p>
+                        </div>
+                        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                            {error && (
+                                <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                                    <div className="flex">
+                                        <div className="flex-shrink-0">
+                                            <i className="fas fa-exclamation-circle text-red-500"></i>
+                                        </div>
+                                        <div className="ml-3">
+                                            <p className="text-sm text-red-700">{error}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="rounded-md shadow-sm -space-y-px">
+                                <div>
+                                    <label htmlFor="name" className="sr-only">Full name</label>
+                                    <input
+                                        id="name"
+                                        name="name"
+                                        type="text"
+                                        autoComplete="name"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Full name"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="email-address" className="sr-only">Email address</label>
+                                    <input
+                                        id="email-address"
+                                        name="email"
+                                        type="email"
+                                        autoComplete="email"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Email address"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="password" className="sr-only">Password</label>
+                                    <input
+                                        id="password"
+                                        name="password"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="confirm-password" className="sr-only">Confirm Password</label>
+                                    <input
+                                        id="confirm-password"
+                                        name="confirm-password"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        required
+                                        className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                        placeholder="Confirm password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <button
+                                    type="submit"
+                                    className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                    <span className="absolute left-0 inset-y-0 flex items-center pl-3">
+                                        <i className="fas fa-user-plus text-indigo-500 group-hover:text-indigo-400"></i>
+                                    </span>
+                                    Sign up
+                                </button>
+                            </div>
+
+                            <div className="text-center">
+                                <p className="mt-2 text-sm text-gray-600">
+                                    Already have an account?{' '}
+                                    <button
+                                        type="button"
+                                        className="font-medium text-indigo-600 hover:text-indigo-500"
+                                        onClick={() => navigateTo('login')}
+                                    >
+                                        Sign in
+                                    </button>
+                                </p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // Dashboard component
+        const Dashboard = ({ user, navigateTo }) => {
+            const [stats, setStats] = useState({
+                coursesCompleted: 3,
+                hoursWatched: 27,
+                coursesInProgress: 2,
+                averageEngagement: 78
+            });
+
+            const [recentActivity, setRecentActivity] = useState([
+                {
+                    id: 1,
+                    course: 'Introduction to AI',
+                    date: 'Today',
+                    progress: 65,
+                    lastEmotion: 'interested'
+                },
+                {
+                    id: 2,
+                    course: 'Data Science Fundamentals',
+                    date: 'Yesterday',
+                    progress: 40,
+                    lastEmotion: 'bored'
+                },
+                {
+                    id: 3,
+                    course: 'Machine Learning Basics',
+                    date: '3 days ago',
+                    progress: 85,
+                    lastEmotion: 'interested'
+                }
+            ]);
+
+            return (
+                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div className="px-4 py-6 sm:px-0">
+                        <h1 className="text-3xl font-bold text-gray-900 slide-in">Welcome back, {user.name}!</h1>
+                        <p className="mt-2 text-gray-600 slide-in">Here's your learning progress and recommendations.</p>
+
+                        {/* Stats */}
+                        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.1s'}}>
+                                <div className="px-4 py-5 sm:p-6">
+                                    <div className="flex items-center">
+                                        <div className="flex-shrink-0 bg-indigo-100 rounded-md p-3">
+                                            <i className="fas fa-graduation-cap text-indigo-600"></i>
+                                        </div>
+                                        <div className="ml-5 w-0 flex-1">
+                                            <dl>
+                                                <dt className="text-sm font-medium text-gray-500 truncate">
+                                                    Courses Completed
+                                                </dt>
+                                                <dd>
+                                                    <div className="text-lg font-medium text-gray-900">
+                                                        {stats.coursesCompleted}
+                                                    </div>
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.2s'}}>
+                                <div className="px-4 py-5 sm:p-6">
+                                    <div className="flex items-center">
+                                        <div className="flex-shrink-0 bg-indigo-100 rounded-md p-3">
+                                            <i className="fas fa-clock text-indigo-600"></i>
+                                        </div>
+                                        <div className="ml-5 w-0 flex-1">
+                                            <dl>
+                                                <dt className="text-sm font-medium text-gray-500 truncate">
+                                                    Hours Watched
+                                                </dt>
+                                                <dd>
+                                                    <div className="text-lg font-medium text-gray-900">
+                                                        {stats.hoursWatched}
+                                                    </div>
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.3s'}}>
+                                <div className="px-4 py-5 sm:p-6">
+                                    <div className="flex items-center">
+                                        <div className="flex-shrink-0 bg-indigo-100 rounded-md p-3">
+                                            <i className="fas fa-book-open text-indigo-600"></i>
+                                        </div>
+                                        <div className="ml-5 w-0 flex-1">
+                                            <dl>
+                                                <dt className="text-sm font-medium text-gray-500 truncate">
+                                                    In Progress
+                                                </dt>
+                                                <dd>
+                                                    <div className="text-lg font-medium text-gray-900">
+                                                        {stats.coursesInProgress}
+                                                    </div>
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.4s'}}>
+                                <div className="px-4 py-5 sm:p-6">
+                                    <div className="flex items-center">
+                                        <div className="flex-shrink-0 bg-indigo-100 rounded-md p-3">
+                                            <i className="fas fa-smile text-indigo-600"></i>
+                                        </div>
+                                        <div className="ml-5 w-0 flex-1">
+                                            <dl>
+                                                <dt className="text-sm font-medium text-gray-500 truncate">
+                                                    Engagement Score
+                                                </dt>
+                                                <dd>
+                                                    <div className="text-lg font-medium text-gray-900">
+                                                        {stats.averageEngagement}%
+                                                    </div>
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Recent Activity */}
+                        <h2 className="mt-8 text-2xl font-medium text-gray-900">Recent Activity</h2>
+                        <div className="mt-4 bg-white shadow overflow-hidden sm:rounded-md slide-in" style={{animationDelay: '0.5s'}}>
+                            <ul className="divide-y divide-gray-200">
+                                {recentActivity.map((activity) => (
+                                    <li key={activity.id}>
+                                        <a href="#" onClick={() => navigateTo('course')} className="block hover:bg-gray-50">
+                                            <div className="px-4 py-4 sm:px-6">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-indigo-600 truncate">
+                                                            {activity.course}
+                                                        </p>
+                                                        <p className="text-sm text-gray-500">
+                                                            Last accessed {activity.date}
+                                                        </p>
+                                                    </div>
+                                                    <div className="relative inline-block">
+                                                        <span className={`emotion-badge ${activity.lastEmotion === 'bored' ? 'emotion-bored' : 'emotion-interested'}`}>
+                                                            {activity.lastEmotion === 'bored' ? 'Seemed bored' : 'Engaged well'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 sm:flex sm:justify-between">
+                                                    <div className="sm:flex w-full">
+                                                        <div className="w-full">
+                                                            <div className="flex items-center">
+                                                                <span className="text-sm text-gray-500 mr-2">Progress:</span>
+                                                                <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                                                                    <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${activity.progress}%` }}></div>
+                                                                </div>
+                                                                <span className="ml-2 text-sm text-gray-500">{activity.progress}%</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        {/* Recommended Courses */}
+                        <h2 className="mt-8 text-2xl font-medium text-gray-900">Recommended For You</h2>
+                        <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="course-card bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.6s'}}>
+                                <div className="p-5">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-lg font-medium text-gray-900">Advanced Machine Learning</h3>
+                                            <p className="mt-1 text-sm text-gray-500">Based on your interest in AI courses</p>
+                                        </div>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            New
+                                        </span>
+                                    </div>
+                                    <div className="mt-4">
+                                        <div className="flex items-center">
+                                            <div className="flex-shrink-0">
+                                                <i className="fas fa-user-circle text-gray-400 text-2xl"></i>
+                                            </div>
+                                            <div className="ml-3">
+                                                <p className="text-sm font-medium text-gray-900">Dr. Sarah Johnson</p>
+                                                <p className="text-sm text-gray-500">AI Research Scientist</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <button 
+                                            onClick={() => navigateTo('course')}
+                                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                        >
+                                            Start Learning
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="course-card bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.7s'}}>
+                                <div className="p-5">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-lg font-medium text-gray-900">Neural Networks Deep Dive</h3>
+                                            <p className="mt-1 text-sm text-gray-500">Recommended based on your progress</p>
+                                        </div>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                            Popular
+                                        </span>
+                                    </div>
+                                    <div className="mt-4">
+                                        <div className="flex items-center">
+                                            <div className="flex-shrink-0">
+                                                <i className="fas fa-user-circle text-gray-400 text-2xl"></i>
+                                            </div>
+                                            <div className="ml-3">
+                                                <p className="text-sm font-medium text-gray-900">Prof. Michael Chen</p>
+                                                <p className="text-sm text-gray-500">Deep Learning Specialist</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <button 
+                                            onClick={() => navigateTo('course')}
+                                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                        >
+                                            Start Learning
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="course-card bg-white overflow-hidden shadow rounded-lg slide-in" style={{animationDelay: '0.8s'}}>
+                                <div className="p-5">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-lg font-medium text-gray-900">Python for Data Science</h3>
+                                            <p className="mt-1 text-sm text-gray-500">Matches your learning style</p>
+                                        </div>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            Beginner
+                                        </span>
+                                    </div>
+                                    <div className="mt-4">
+                                        <div className="flex items-center">
+                                            <div className="flex-shrink-0">
+                                                <i className="fas fa-user-circle text-gray-400 text-2xl"></i>
+                                            </div>
+                                            <div className="ml-3">
+                                                <p className="text-sm font-medium text-gray-900">Alex Thompson</p>
+                                                <p className="text-sm text-gray-500">Data Scientist</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <button 
+                                            onClick={() => navigateTo('course')}
+                                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                        >
+                                            Start Learning
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Courses component
+        const Courses = ({ navigateTo }) => {
+            const [categories, setCategories] = useState([
+                'All Courses',
+                'Data Science',
+                'AI & Machine Learning',
+                'Web Development',
+                'Mobile Apps',
+                'Blockchain'
+            ]);
+            const [selectedCategory, setSelectedCategory] = useState('All Courses');
+            const [courses, setCourses] = useState([
+                {
+                    id: 1,
+                    title: 'Introduction to AI',
+                    category: 'AI & Machine Learning',
+                    instructor: 'Dr. Sarah Johnson',
+                    level: 'Beginner',
+                    duration: '6 hours',
+                    rating: 4.8,
+                    students: 12453,
+                    progress: 65,
+                    description: 'Learn the fundamentals of artificial intelligence and its applications in the modern world.'
+                },
+                {
+                    id: 2,
+                    title: 'Data Science Fundamentals',
+                    category: 'Data Science',
+                    instructor: 'Prof. Michael Chen',
+                    level: 'Intermediate',
+                    duration: '8 hours',
+                    rating: 4.6,
+                    students: 9876,
+                    progress: 40,
+                    description: 'Master the essential skills for data analysis and visualization using Python.'
+                },
+                {
+                    id: 3,
+                    title: 'Machine Learning Basics',
+                    category: 'AI & Machine Learning',
+                    instructor: 'Alex Thompson',
+                    level: 'Beginner',
+                    duration: '7 hours',
+                    rating: 4.7,
+                    students: 15678,
+                    progress: 85,
+                    description: 'Understand the fundamental concepts behind machine learning algorithms and models.'
+                },
+                {
+                    id: 4,
+                    title: 'Advanced Neural Networks',
+                    category: 'AI & Machine Learning',
+                    instructor: 'Dr. Emily Parker',
+                    level: 'Advanced',
+                    duration: '10 hours',
+                    rating: 4.9,
+                    students: 7321,
+                    progress: 0,
+                    description: 'Dive deep into neural network architectures and advanced concepts in deep learning.'
+                },
+                {
+                    id: 5,
+                    title: 'Blockchain Fundamentals',
+                    category: 'Blockchain',
+                    instructor: 'James Wilson',
+                    level: 'Beginner',
+                    duration: '5 hours',
+                    rating: 4.5,
+                    students: 5432,
+                    progress: 0,
+                    description: 'Learn the basics of blockchain technology and its applications beyond cryptocurrencies.'
+                },
+                {
+                    id: 6,
+                    title: 'React Native Development',
+                    category: 'Mobile Apps',
+                    instructor: 'Sofia Martinez',
+                    level: 'Intermediate',
+                    duration: '9 hours',
+                    rating: 4.6,
+                    students: 8765,
+                    progress: 0,
+                    description: 'Build cross-platform mobile applications using React Native for iOS and Android.'
+                }
+            ]);
+
+            const filteredCourses = selectedCategory === 'All Courses' 
+                ? courses 
+                : courses.filter(course => course.category === selectedCategory);
+
+            return (
+                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div className="px-4 py-6 sm:px-0">
+                        <div className="mb-8 slide-in">
+                            <h1 className="text-3xl font-bold text-gray-900">Course Catalog</h1>
+                            <p className="mt-2 text-gray-600">Explore our library of courses tailored to your learning needs.</p>
+                        </div>
+
+                        {/* Category Filter */}
+                        <div className="mb-8 slide-in" style={{animationDelay: '0.1s'}}>
+                            <div className="flex flex-wrap gap-2">
+                                {categories.map((category, index) => (
+                                    <button
+                                        key={index}
+                                        className={`px-4 py-2 rounded-full text-sm font-medium ${
+                                            selectedCategory === category
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                                        }`}
+                                        onClick={() => setSelectedCategory(category)}
+                                    >
+                                        {category}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Course List */}
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                            {filteredCourses.map((course, index) => (
+                                <div 
+                                    key={course.id} 
+                                    className="course-card bg-white overflow-hidden shadow rounded-lg slide-in" 
+                                    style={{animationDelay: `${0.2 + index * 0.1}s`}}
+                                >
+                                    <div className="p-6">
+                                        <div className="flex justify-between">
+                                            <h3 className="text-lg font-medium text-gray-900">{course.title}</h3>
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                course.level === 'Beginner' ? 'bg-green-100 text-green-800' :
+                                                course.level === 'Intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-red-100 text-red-800'
+                                            }`}>
+                                                {course.level}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-sm text-gray-500">{course.description}</p>
+                                        
+                                        <div className="mt-4 flex items-center">
+                                            <div className="flex-shrink-0">
+                                                <i className="fas fa-user-circle text-gray-400 text-2xl"></i>
+                                            </div>
+                                            <div className="ml-3">
+                                                <p className="text-sm font-medium text-gray-900">{course.instructor}</p>
+                                                <p className="text-sm text-gray-500">{course.category}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mt-4 flex justify-between text-sm">
+                                            <div className="flex items-center">
+                                                <i className="fas fa-clock text-gray-500 mr-1"></i>
+                                                <span className="text-gray-500">{course.duration}</span>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <i className="fas fa-star text-yellow-400 mr-1"></i>
+                                                <span className="text-gray-700">{course.rating}</span>
+                                                <span className="text-gray-500 ml-1">({course.students})</span>
+                                            </div>
+                                        </div>
+                                        
+                                        {course.progress > 0 && (
+                                            <div className="mt-4">
+                                                <div className="flex items-center">
+                                                    <span className="text-sm text-gray-500 mr-2">Progress:</span>
+                                                    <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                                                        <div 
+                                                            className="bg-indigo-600 h-2.5 rounded-full" 
+                                                            style={{ width: `${course.progress}%` }}>
+                                                        </div>
+                                                    </div>
+                                                    <span className="ml-2 text-sm text-gray-500">{course.progress}%</span>
+                                                </div>
+                                                <button 
+                                                    onClick={() => navigateTo('course')}
+                                                    className="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                >
+                                                    Continue Learning
+                                                </button>
+                                            </div>
+                                        )}
+                                        
+                                        {course.progress === 0 && (
+                                            <button 
+                                                onClick={() => navigateTo('course')}
+                                                className="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                            >
+                                                Start Course
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        
+const CoursePlayer = ({ navigateTo, modelsLoaded }) => {
+    const [courseTitle] = useState('Introduction to Artificial Intelligence');
+    const [currentModule] = useState(1);
+    const [totalModules] = useState(8);
+    const [videoId] = useState('nVyD6THcvDQ'); // YouTube video ID for AI course
+    const [emotion, setEmotion] = useState('interested');
+    const [emotionHistory, setEmotionHistory] = useState([]);
+    const [showRecommendations, setShowRecommendations] = useState(false);
+    const [cameraEnabled, setCameraEnabled] = useState(false);
+    
+    const videoRef = useRef(null);
+    const webcamRef = useRef(null);
+    const canvasRef = useRef(null);
+    const emotionDetectionInterval = useRef(null);
+
+    // Video IDs for each course
+    const courseVideos = {
+        'Introduction to AI': 'nVyD6THcvDQ', // Stanford CS221: Artificial Intelligence
+        'Data Science Fundamentals': 'ua-CiDNNj30', // MIT Introduction to Data Science
+        'Machine Learning Basics': 'jGwO_UgTS7I', // Stanford CS229: Machine Learning
+        'Advanced Neural Networks': 'CS4cs9xpXxE', // MIT Deep Learning
+        'Blockchain Fundamentals': 'SSo_EIwHSd4', // MIT Blockchain and Money
+        'React Native Development': 'ifOzAyR1cLI' // React Native Tutorial
+    };
+
+    const recommendations = [
+        {
+            id: 1,
+            title: 'Try a more interactive section',
+            description: 'Switch to the practical exercise on AI implementations',
+            icon: 'hands-on'
+        },
+        {
+            id: 2,
+            title: 'Take a short break',
+            description: 'A 5-minute break can help refresh your mind',
+            icon: 'break'
+        },
+        {
+            id: 3,
+            title: 'Try a different learning format',
+            description: 'Switch to the illustrated guide to AI concepts',
+            icon: 'visual'
+        }
+    ];
+
+    const courseModules = [
+        { id: 1, title: 'Introduction to AI Concepts', duration: '12:30', completed: true },
+        { id: 2, title: 'History of Artificial Intelligence', duration: '15:45', completed: false, current: true },
+        { id: 3, title: 'Machine Learning Fundamentals', duration: '18:20', completed: false },
+        { id: 4, title: 'Neural Networks Explained', duration: '20:15', completed: false },
+        { id: 5, title: 'Deep Learning Applications', duration: '14:50', completed: false },
+        { id: 6, title: 'Natural Language Processing', duration: '16:30', completed: false },
+        { id: 7, title: 'Computer Vision Systems', duration: '19:10', completed: false },
+        { id: 8, title: 'Future of AI & Ethics', duration: '17:45', completed: false }
+    ];
+
+    // Setup webcam and emotion detection
+    useEffect(() => {
+        if (!cameraEnabled) return;
+
+        const setupWebcam = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 320, height: 240 }
+                });
+                
+                if (webcamRef.current) {
+                    webcamRef.current.srcObject = stream;
+                }
+                
+                // Start emotion detection after webcam is ready
+                webcamRef.current.onloadedmetadata = () => {
+                    startEmotionDetection();
+                };
+            } catch (err) {
+                console.error("Error accessing webcam:", err);
+            }
+        };
+
+        setupWebcam();
+
+        return () => {
+            // Cleanup webcam and interval when component unmounts
+            if (emotionDetectionInterval.current) {
+                clearInterval(emotionDetectionInterval.current);
+            }
+            
+            if (webcamRef.current && webcamRef.current.srcObject) {
+                webcamRef.current.srcObject.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [cameraEnabled]);
+
+    const startEmotionDetection = () => {
+        if (emotionDetectionInterval.current) {
+            clearInterval(emotionDetectionInterval.current);
+        }
+        
+        emotionDetectionInterval.current = setInterval(async () => {
+            await detectEmotion();
+        }, 3000); // Every 3 seconds
+    };
+
+    const detectEmotion = async () => {
+        if (!webcamRef.current || !canvasRef.current || !webcamRef.current.srcObject) return;
+        
+        const video = webcamRef.current;
+        const canvas = canvasRef.current;
+        
+        // Match canvas size to video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert canvas to blob for API request
+        canvas.toBlob(blob => {
+            const formData = new FormData();
+            formData.append('file', blob, 'frame.jpg');
+
+            fetch('http://localhost:5000/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.emotion) {
+                    // Update emotion-result div
+                    const emotionResultEl = document.getElementById('emotion-result');
+                    if (emotionResultEl) {
+                        emotionResultEl.innerText = `Detected Emotion: ${data.emotion}`;
+                    }
+                    
+                    // Map API emotions to UI emotions (interested or bored)
+                    const boredEmotions = ['sad', 'angry', 'disgust', 'fear', 'neutral'];
+                    const newEmotion = boredEmotions.includes(data.emotion.toLowerCase()) ? 'bored' : 'interested';
+                    
+                    // Update emotion state if it changed
+                    if (newEmotion !== emotion) {
+                        setEmotion(newEmotion);
+                        
+                        // Add to emotion history
+                        const timestamp = new Date().toLocaleTimeString();
+                        setEmotionHistory(prev => [...prev, { 
+                            emotion: newEmotion, 
+                            timestamp,
+                            rawEmotion: data.emotion
+                        }]);
+                        
+                        // Show recommendations if bored
+                        if (newEmotion === 'bored' && !showRecommendations) {
+                            setShowRecommendations(true);
+                        }
+                    }
+                }
+            })
+            .catch(err => console.error('Error:', err));
+        }, 'image/jpeg');
+    };
+
+    const handleCameraToggle = () => {
+        if (cameraEnabled) {
+            // Turn off camera
+            if (webcamRef.current && webcamRef.current.srcObject) {
+                webcamRef.current.srcObject.getTracks().forEach(track => track.stop());
+            }
+            if (emotionDetectionInterval.current) {
+                clearInterval(emotionDetectionInterval.current);
+            }
+        }
+        setCameraEnabled(!cameraEnabled);
+    };
+
+    const dismissRecommendations = () => {
+        setShowRecommendations(false);
+    };
+
+    return (
+        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <div className="px-4 py-6 sm:px-0">
+                {/* Course Header */}
+                <div className="flex justify-between items-center mb-6 slide-in">
+                    <div>
+                        <button 
+                            onClick={() => navigateTo('courses')}
+                            className="flex items-center text-indigo-600 hover:text-indigo-800"
+                        >
+                            <i className="fas fa-arrow-left mr-2"></i>
+                            Back to Courses
+                        </button>
+                        <h1 className="text-3xl font-bold text-gray-900 mt-2">{courseTitle}</h1>
+                        <p className="text-gray-600">Module {currentModule} of {totalModules}</p>
+                    </div>
+                    <div>
+                        <button 
+                            onClick={handleCameraToggle}
+                            className={`px-4 py-2 rounded-md text-sm font-medium ${
+                                cameraEnabled 
+                                    ? 'bg-red-600 text-white hover:bg-red-700' 
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                            }`}
+                        >
+                            <i className={`fas fa-${cameraEnabled ? 'video-slash' : 'video'} mr-2`}></i>
+                            {cameraEnabled ? 'Disable' : 'Enable'} Emotion Detection
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Main Video Content */}
+                    <div className="lg:w-2/3 slide-in" style={{animationDelay: '0.1s'}}>
+                        <div className="bg-white shadow rounded-lg overflow-hidden">
+                            <div className="relative">
+                                <div className="video-container">
+                                    <iframe
+                                        src={`https://www.youtube.com/embed/${videoId}`}
+                                        title="YouTube video player"
+                                        frameBorder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                    ></iframe>
+                                    [videoId]=useState('h2FDq3agImI');
+                                </div>
+                                {emotion === 'bored' && (
+                                    <span className="emotion-badge emotion-bored">
+                                        <i className="fas fa-meh mr-1"></i> Low engagement detected
+                                    </span>
+                                )}
+                            </div>
+                            <div className="p-4">
+                                <h2 className="text-xl font-semibold">History of Artificial Intelligence</h2>
+                                <div className="flex items-center mt-2 text-sm text-gray-500">
+                                    <span className="flex items-center mr-4">
+                                        <i className="fas fa-clock mr-1"></i> 15:45
+                                    </span>
+                                    <span className="flex items-center">
+                                        <i className="fas fa-calendar-alt mr-1"></i> Updated Jan 2023
+                                    </span>
+                                </div>
+                                <div className="mt-4">
+                                    <div className="flex items-center">
+                                        <span className="text-sm text-gray-500 mr-2">Progress:</span>
+                                        <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                                            <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: '45%' }}></div>
+                                        </div>
+                                        <span className="ml-2 text-sm text-gray-500">45%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Description */}
+                        <div className="mt-6 bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.2s'}}>
+                            <h3 className="text-lg font-medium text-gray-900">About This Lesson</h3>
+                            <p className="mt-2 text-gray-600">
+                                This lesson covers the fascinating history of artificial intelligence, from its conceptual 
+                                beginnings in ancient myths to the formal establishment of AI as a field in 1956. You'll 
+                                learn about key milestones, major figures, AI winters, and the eventual renaissance of AI 
+                                through machine learning and neural networks.
+                            </p>
+                            <div className="mt-4">
+                                <h4 className="text-md font-medium text-gray-900">What You'll Learn:</h4>
+                                <ul className="mt-2 list-disc pl-5 text-gray-600">
+                                    <li>Early conceptual foundations of AI</li>
+                                    <li>The Dartmouth Conference and birth of AI</li>
+                                    <li>Key figures in AI development</li>
+                                    <li>AI winters and their causes</li>
+                                    <li>Modern renaissance of AI through deep learning</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        {/* Recommendations (shown when student appears bored) */}
+                        {showRecommendations && (
+                            <div className="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md slide-in" style={{animationDelay: '0.1s'}}>
+                                <div className="flex">
+                                    <div className="flex-shrink-0">
+                                        <i className="fas fa-lightbulb text-yellow-600"></i>
+                                    </div>
+                                    <div className="ml-3">
+                                        <h3 className="text-lg font-medium text-yellow-800">
+                                            We noticed you might need a change
+                                        </h3>
+                                        <div className="mt-2 text-yellow-700">
+                                            <p>Based on your engagement, here are some recommendations:</p>
+                                        </div>
+                                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            {recommendations.map(rec => (
+                                                <div key={rec.id} className="recommendation-card bg-white p-4 rounded-md shadow-sm">
+                                                    <div className="flex items-center mb-2">
+                                                        <span className="bg-yellow-100 rounded-full p-2 mr-2">
+                                                            <i className={`fas fa-${rec.icon === 'hands-on' ? 'laptop-code' : rec.icon === 'break' ? 'coffee' : 'images'} text-yellow-600`}></i>
+                                                        </span>
+                                                        <h4 className="font-medium text-gray-900">{rec.title}</h4>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600">{rec.description}</p>
+                                                    <button className="mt-2 text-sm text-indigo-600 hover:text-indigo-800">
+                                                        Try this →
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-4 text-right">
+                                            <button 
+                                                onClick={dismissRecommendations}
+                                                className="text-sm text-yellow-800 hover:text-yellow-900 font-medium"
+                                            >
+                                                Dismiss
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right Sidebar */}
+                    <div className="lg:w-1/3 space-y-6">
+                        {/* Webcam Feed and Emotion Detection */}
+                        {cameraEnabled && (
+                            <div className="bg-white shadow rounded-lg p-4 slide-in" style={{animationDelay: '0.3s'}}>
+                                <h3 className="text-lg font-medium text-gray-900 mb-3">Engagement Monitoring</h3>
+                                <div className="webcam-container mx-auto">
+                                    <video 
+                                        ref={webcamRef}
+                                        id="webcam"
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <canvas 
+                                        ref={canvasRef}
+                                        id="canvas"
+                                        style={{display: 'none'}}
+                                    />
+                                    <div className="emotion-overlay">
+                                        {emotion === 'interested' ? (
+                                            <span className="text-green-400">
+                                                <i className="fas fa-smile mr-1"></i> Engaged
+                                            </span>
+                                        ) : (
+                                            <span className="text-red-400">
+                                                <i className="fas fa-meh mr-1"></i> Disinterested
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="mt-3">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-1">Recent Engagement:</h4>
+                                    <div className="text-xs space-y-1 max-h-20 overflow-y-auto">
+                                        {emotionHistory.slice().reverse().map((item, index) => (
+                                            <div key={index} className="flex justify-between">
+                                                <span className={item.emotion === 'interested' ? 'text-green-600' : 'text-red-600'}>
+                                                    <i className={`fas fa-${item.emotion === 'interested' ? 'smile' : 'meh'} mr-1`}></i>
+                                                    {item.emotion === 'interested' ? 'Engaged' : 'Disinterested'}
+                                                    {item.rawEmotion && ` (${item.rawEmotion})`}
+                                                </span>
+                                                <span className="text-gray-500">{item.timestamp}</span>
+                                            </div>
+                                        ))}
+                                        {emotionHistory.length === 0 && (
+                                            <div className="text-gray-500 italic">No data yet</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div id="emotion-result" className="mt-2 text-xs text-center text-gray-600"></div>
+                            </div>
+                        )}
+
+                        {/* Course Content (Modules) */}
+                        <div className="bg-white shadow rounded-lg p-4 slide-in" style={{animationDelay: '0.4s'}}>
+                            <h3 className="text-lg font-medium text-gray-900 mb-3">Course Content</h3>
+                            <div className="space-y-2">
+                                {courseModules.map(module => (
+                                    <div 
+                                        key={module.id}
+                                        className={`p-3 rounded-md ${
+                                            module.current ? 'bg-indigo-50 border-l-4 border-indigo-500' : 
+                                            module.completed ? 'bg-gray-50' : ''
+                                        }`}
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center">
+                                                {module.completed ? (
+                                                    <span className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-2">
+                                                        <i className="fas fa-check text-white text-xs"></i>
+                                                    </span>
+                                                ) : module.current ? (
+                                                    <span className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center mr-2">
+                                                        <i className="fas fa-play text-white text-xs"></i>
+                                                    </span>
+                                                ) : (
+                                                    <span className="w-5 h-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                                                        <span className="text-white text-xs">{module.id}</span>
+                                                    </span>
+                                                )}
+                                                <span className={`text-sm ${module.current ? 'font-medium' : ''}`}>
+                                                    {module.title}
+                                                </span>
+                                            </div>
+                                            <span className="text-xs text-gray-500">{module.duration}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Course Resources */}
+                        <div className="bg-white shadow rounded-lg p-4 slide-in" style={{animationDelay: '0.5s'}}>
+                            <h3 className="text-lg font-medium text-gray-900 mb-3">Resources</h3>
+                            <ul className="space-y-2">
+                                <li>
+                                    <a href="#" className="flex items-center p-2 hover:bg-gray-50 rounded-md">
+                                        <i className="fas fa-file-pdf text-red-500 mr-2"></i>
+                                        <span className="text-sm">History of AI - Timeline PDF</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#" className="flex items-center p-2 hover:bg-gray-50 rounded-md">
+                                        <i className="fas fa-file-alt text-blue-500 mr-2"></i>
+                                        <span className="text-sm">Lecture Transcript</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#" className="flex items-center p-2 hover:bg-gray-50 rounded-md">
+                                        <i className="fas fa-link text-purple-500 mr-2"></i>
+                                        <span className="text-sm">Additional Reading Links</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#" className="flex items-center p-2 hover:bg-gray-50 rounded-md">
+                                        <i className="fas fa-tasks text-green-500 mr-2"></i>
+                                        <span className="text-sm">Quiz: Test Your Knowledge</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+        // Analytics component
+        const Analytics = ({ user, navigateTo }) => {
+            const [engagementData] = useState({
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Engagement Score',
+                    data: [65, 72, 68, 85, 80, 75, 70],
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            });
+
+            const [emotionData] = useState({
+                labels: ['Interested', 'Bored', 'Confused', 'Neutral'],
+                datasets: [{
+                    label: 'Percentage',
+                    data: [65, 20, 10, 5],
+                    backgroundColor: [
+                        'rgba(52, 211, 153, 0.8)',
+                        'rgba(239, 68, 68, 0.8)',
+                        'rgba(251, 191, 36, 0.8)',
+                        'rgba(156, 163, 175, 0.8)'
+                    ],
+                    borderWidth: 0
+                }]
+            });
+
+            const [courseProgress] = useState([
+                { course: 'Introduction to AI', progress: 85, emotions: { interested: 70, bored: 20, confused: 10 } },
+                { course: 'Data Science Fundamentals', progress: 40, emotions: { interested: 60, bored: 30, confused: 10 } },
+                { course: 'Machine Learning Basics', progress: 65, emotions: { interested: 75, bored: 15, confused: 10 } }
+            ]);
+
+            useEffect(() => {
+                // Create engagement chart
+                const engagementCtx = document.getElementById('engagementChart');
+                if (engagementCtx) {
+                    new Chart(engagementCtx, {
+                        type: 'line',
+                        data: engagementData,
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value + '%';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Create emotions chart
+                const emotionsCtx = document.getElementById('emotionsChart');
+                if (emotionsCtx) {
+                    new Chart(emotionsCtx, {
+                        type: 'doughnut',
+                        data: emotionData,
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'right'
+                                }
+                            },
+                            cutout: '70%'
+                        }
+                    });
+                }
+            }, []);
+
+            return (
+                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div className="px-4 py-6 sm:px-0">
+                        <div className="mb-8 slide-in">
+                            <h1 className="text-3xl font-bold text-gray-900">Learning Analytics</h1>
+                            <p className="mt-2 text-gray-600">Track your engagement and progress across all your courses.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Weekly Engagement Chart */}
+                            <div className="lg:col-span-2 bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.1s'}}>
+                                <h2 className="text-lg font-medium text-gray-900 mb-4">Weekly Engagement</h2>
+                                <div className="h-64">
+                                    <canvas id="engagementChart"></canvas>
+                                </div>
+                                <div className="flex justify-between items-center mt-4 text-sm text-gray-500">
+                                    <div>
+                                        <span className="font-medium text-gray-900">Average: </span>
+                                        73%
+                                    </div>
+                                    <div>
+                                        <span className="font-medium text-gray-900">Best day: </span>
+                                        Thursday (85%)
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Emotion Distribution Chart */}
+                            <div className="bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.2s'}}>
+                                <h2 className="text-lg font-medium text-gray-900 mb-4">Emotion Distribution</h2>
+                                <div className="h-64 flex items-center justify-center">
+                                    <canvas id="emotionsChart"></canvas>
+                                </div>
+                                <div className="mt-4 text-center text-sm text-gray-500">
+                                    <p>You appear engaged for <span className="font-medium text-gray-900">65%</span> of your learning time</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Course Progress and Engagement */}
+                        <div className="mt-6">
+                            <h2 className="text-xl font-medium text-gray-900 mb-4 slide-in" style={{animationDelay: '0.3s'}}>
+                                Course Progress & Engagement
+                            </h2>
+                            <div className="bg-white shadow rounded-lg overflow-hidden slide-in" style={{animationDelay: '0.4s'}}>
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Course
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Progress
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Emotion Analysis
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Actions
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {courseProgress.map((course, index) => (
+                                            <tr key={index} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">{course.course}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="w-48">
+                                                        <div className="flex items-center">
+                                                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                                                <div 
+                                                                    className="bg-indigo-600 h-2.5 rounded-full" 
+                                                                    style={{ width: `${course.progress}%` }}>
+                                                                </div>
+                                                            </div>
+                                                            <span className="ml-2 text-sm text-gray-500">{course.progress}%</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex space-x-2">
+                                                        <div className="flex items-center text-sm">
+                                                            <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                                            <span>{course.emotions.interested}%</span>
+                                                        </div>
+                                                        <div className="flex items-center text-sm">
+                                                            <span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                                            <span>{course.emotions.bored}%</span>
+                                                        </div>
+                                                        <div className="flex items-center text-sm">
+                                                            <span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span>
+                                                            <span>{course.emotions.confused}%</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    <button 
+                                                        onClick={() => navigateTo('course')}
+                                                        className="text-indigo-600 hover:text-indigo-900"
+                                                    >
+                                                        Continue Learning
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Recommendations based on analytics */}
+                        <div className="mt-6 bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.5s'}}>
+                            <h2 className="text-lg font-medium text-gray-900 mb-4">Personalized Recommendations</h2>
+                            <div className="space-y-4">
+                                <div className="p-4 border border-indigo-100 bg-indigo-50 rounded-md">
+                                    <div className="flex">
+                                        <div className="flex-shrink-0">
+                                            <i className="fas fa-lightbulb text-indigo-600"></i>
+                                        </div>
+                                        <div className="ml-3">
+                                            <h3 className="text-md font-medium text-indigo-800">Optimal Learning Times</h3>
+                                            <p className="mt-1 text-sm text-indigo-700">
+                                                Based on your engagement data, you seem most focused between 9 AM - 11 AM. 
+                                                Try scheduling your most challenging courses during this time.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="p-4 border border-yellow-100 bg-yellow-50 rounded-md">
+                                    <div className="flex">
+                                        <div className="flex-shrink-0">
+                                            <i className="fas fa-exclamation-circle text-yellow-600"></i>
+                                        </div>
+                                        <div className="ml-3">
+                                            <h3 className="text-md font-medium text-yellow-800">Attention Needed</h3>
+                                            <p className="mt-1 text-sm text-yellow-700">
+                                                You seemed less engaged during theoretical sections in "Data Science Fundamentals". 
+                                                Try the interactive exercises to reinforce these concepts.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="p-4 border border-green-100 bg-green-50 rounded-md">
+                                    <div className="flex">
+                                        <div className="flex-shrink-0">
+                                            <i className="fas fa-star text-green-600"></i>
+                                        </div>
+                                        <div className="ml-3">
+                                            <h3 className="text-md font-medium text-green-800">Strengths</h3>
+                                            <p className="mt-1 text-sm text-green-700">
+                                                You show consistent engagement in practical coding sections. 
+                                                Consider our "Hands-on Machine Learning" course to leverage this learning style.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Profile component
+        const Profile = ({ user, navigateTo, onLogout }) => {
+            const [profileData, setProfileData] = useState({
+                name: user.name,
+                email: user.email,
+                bio: 'AI enthusiast and lifelong learner passionate about data science and machine learning.',
+                profilePicture: null,
+                notifications: {
+                    email: true,
+                    progress: true,
+                    recommendations: true
+                },
+                privacySettings: {
+                    shareProgress: false,
+                    allowEmotionTracking: true
+                }
+            });
+
+            const [isEditing, setIsEditing] = useState(false);
+
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setProfileData(prev => ({
+                    ...prev,
+                    [name]: value
+                }));
+            };
+
+            const handleToggleChange = (category, setting) => {
+                setProfileData(prev => ({
+                    ...prev,
+                    [category]: {
+                        ...prev[category],
+                        [setting]: !prev[category][setting]
+                    }
+                }));
+            };
+
+            const handleSaveProfile = () => {
+                // In a real app, this would save to backend
+                setIsEditing(false);
+            };
+
+            return (
+                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div className="px-4 py-6 sm:px-0">
+                        <div className="mb-8 slide-in">
+                            <h1 className="text-3xl font-bold text-gray-900">Your Profile</h1>
+                            <p className="mt-2 text-gray-600">Manage your account settings and preferences.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Profile Summary Card */}
+                            <div className="md:col-span-1">
+                                <div className="bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.1s'}}>
+                                    <div className="text-center">
+                                        <div className="w-24 h-24 rounded-full bg-indigo-200 mx-auto flex items-center justify-center text-indigo-600">
+                                            <span className="text-3xl font-bold">{profileData.name.charAt(0).toUpperCase()}</span>
+                                        </div>
+                                        <h2 className="mt-4 text-xl font-medium text-gray-900">{profileData.name}</h2>
+                                        <p className="text-gray-500">{profileData.email}</p>
+                                        <p className="mt-2 text-sm text-gray-600">{profileData.bio}</p>
+                                    </div>
+                                    <div className="mt-6">
+                                        <div className="pt-4 border-t border-gray-200">
+                                            <h3 className="text-lg font-medium text-gray-900">Stats</h3>
+                                            <dl className="mt-2 text-sm text-gray-600">
+                                                <div className="flex justify-between py-1">
+                                                    <dt>Courses Completed</dt>
+                                                    <dd className="font-medium text-gray-900">3</dd>
+                                                </div>
+                                                <div className="flex justify-between py-1">
+                                                    <dt>Hours Learned</dt>
+                                                    <dd className="font-medium text-gray-900">27</dd>
+                                                </div>
+                                                <div className="flex justify-between py-1">
+                                                    <dt>Average Engagement</dt>
+                                                    <dd className="font-medium text-gray-900">73%</dd>
+                                                </div>
+                                                <div className="flex justify-between py-1">
+                                                    <dt>Member Since</dt>
+                                                    <dd className="font-medium text-gray-900">January 2023</dd>
+                                                </div>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                    <div className="mt-6">
+                                        <button
+                                            onClick={onLogout}
+                                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                        >
+                                            <i className="fas fa-sign-out-alt mr-2"></i> Sign Out
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Profile Edit Form */}
+                            <div className="md:col-span-2">
+                                <div className="bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.2s'}}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h2 className="text-xl font-medium text-gray-900">Profile Information</h2>
+                                        {!isEditing ? (
+                                            <button
+                                                onClick={() => setIsEditing(true)}
+                                                className="flex items-center text-sm text-indigo-600 hover:text-indigo-900"
+                                            >
+                                                <i className="fas fa-edit mr-1"></i> Edit
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={handleSaveProfile}
+                                                className="flex items-center text-sm text-green-600 hover:text-green-900"
+                                            >
+                                                <i className="fas fa-save mr-1"></i> Save
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Name</label>
+                                            <input
+                                                type="text"
+                                                name="name"
+                                                id="name"
+                                                className={`mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md ${!isEditing && 'bg-gray-50'}`}
+                                                value={profileData.name}
+                                                onChange={handleInputChange}
+                                                disabled={!isEditing}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                id="email"
+                                                className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-gray-50"
+                                                value={profileData.email}
+                                                disabled
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="bio" className="block text-sm font-medium text-gray-700">Bio</label>
+                                            <textarea
+                                                id="bio"
+                                                name="bio"
+                                                rows="3"
+                                                className={`mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md ${!isEditing && 'bg-gray-50'}`}
+                                                value={profileData.bio}
+                                                onChange={handleInputChange}
+                                                disabled={!isEditing}
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Notification Settings */}
+                                <div className="mt-6 bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.3s'}}>
+                                    <h2 className="text-xl font-medium text-gray-900 mb-4">Notification Settings</h2>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900">Email Notifications</h3>
+                                                <p className="text-xs text-gray-500">Receive updates and course recommendations via email</p>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <button
+                                                    onClick={() => handleToggleChange('notifications', 'email')}
+                                                    className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none ${
+                                                        profileData.notifications.email ? 'bg-indigo-600' : 'bg-gray-200'
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={profileData.notifications.email}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${
+                                                            profileData.notifications.email ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                    ></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900">Progress Reports</h3>
+                                                <p className="text-xs text-gray-500">Receive weekly summaries of your learning progress</p>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <button
+                                                    onClick={() => handleToggleChange('notifications', 'progress')}
+                                                    className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none ${
+                                                        profileData.notifications.progress ? 'bg-indigo-600' : 'bg-gray-200'
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={profileData.notifications.progress}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${
+                                                            profileData.notifications.progress ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                    ></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900">Personalized Recommendations</h3>
+                                                <p className="text-xs text-gray-500">Get AI-powered course recommendations based on your interests</p>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <button
+                                                    onClick={() => handleToggleChange('notifications', 'recommendations')}
+                                                    className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none ${
+                                                        profileData.notifications.recommendations ? 'bg-indigo-600' : 'bg-gray-200'
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={profileData.notifications.recommendations}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${
+                                                            profileData.notifications.recommendations ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                    ></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Privacy Settings */}
+                                <div className="mt-6 bg-white shadow rounded-lg p-6 slide-in" style={{animationDelay: '0.4s'}}>
+                                    <h2 className="text-xl font-medium text-gray-900 mb-4">Privacy Settings</h2>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900">Share Progress with Instructors</h3>
+                                                <p className="text-xs text-gray-500">Allow course instructors to see your learning progress</p>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <button
+                                                    onClick={() => handleToggleChange('privacySettings', 'shareProgress')}
+                                                    className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none ${
+                                                        profileData.privacySettings.shareProgress ? 'bg-indigo-600' : 'bg-gray-200'
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={profileData.privacySettings.shareProgress}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${
+                                                            profileData.privacySettings.shareProgress ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                    ></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900">Emotion Detection</h3>
+                                                <p className="text-xs text-gray-500">Allow the platform to detect your emotions for personalized learning</p>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <button
+                                                    onClick={() => handleToggleChange('privacySettings', 'allowEmotionTracking')}
+                                                    className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none ${
+                                                        profileData.privacySettings.allowEmotionTracking ? 'bg-indigo-600' : 'bg-gray-200'
+                                                    }`}
+                                                    role="switch"
+                                                    aria-checked={profileData.privacySettings.allowEmotionTracking}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${
+                                                            profileData.privacySettings.allowEmotionTracking ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
+                                                    ></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 text-xs text-gray-500">
+                                        <p>Your privacy is important to us. We only use your emotion data to improve your personal learning experience and never share it with third parties.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Mount the App component to the DOM
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
+    <script> window.chtlConfig = { chatbotId: "3271449571" } </script>
+    <script async data-id="3271449571" id="chatling-embed-script" type="text/javascript" src="https://chatling.ai/js/embed.js"></script>
+</body>
+</html>
